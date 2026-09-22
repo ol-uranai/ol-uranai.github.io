@@ -1,0 +1,491 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>職場の相関図 ｜ OL占い師ミサキ</title>
+<!--
+  職場の相関図ツール（無料・ブラウザ内完結・APIを叩かない）
+
+  ■ 設計の前提（ここを外すと使われないツールになる）
+    職場の人の「生年月日」はほぼ知らない。年が1年ずれると日干は完全に変わるため、
+    年齢の当て推量では絶対に埋められない（1972〜1981年の3/2生まれで五行が4種類に散る）。
+    よって入口は「自分の生年月日だけ」。自分の命式から5つの席が100%確定するので、
+    相手が誰か分からなくても図は始められる。
+    相手は ①生年月日が分かる→確定  ②分からない→4問で推定 の二段構え。
+    推定は必ず「推定」と明示すること（全社ルール線④／断定しない）。
+
+  ■ ロジックの正本
+    ../ultimate_fortune_sanctuary.py の ShichuSuimei と engine.py。ここはその JS 移植。
+    数式を変えるときは必ず engine.py も直すこと。
+    （1900/1/1=甲戌・2000/1/1=戊午を万年暦と照合／辺の向き90通り・通変星100通りを検証済み）
+-->
+<style>
+  :root{
+    --bg:#faf8f5; --card:#fff; --ink:#2b2724; --sub:#6f6862; --line:#e6e0d8;
+    --accent:#7b5ea7; --sei:#3f9e6a; --koku:#c8553d; --hiwa:#9b938c;
+    --moku:#3f9e6a; --ka:#c8553d; --do:#b8894a; --kin:#8d8358; --sui:#3f74a6;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{ --bg:#17151a; --card:#211e26; --ink:#ece8f0; --sub:#a49cae; --line:#332e3b; --accent:#b59ae0; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
+    line-height:1.75;-webkit-text-size-adjust:100%}
+  .wrap{max-width:860px;margin:0 auto;padding:22px 18px 80px}
+  header{text-align:center;padding:16px 0 4px}
+  header h1{font-size:1.45rem;margin:0 0 6px;letter-spacing:.02em}
+  header p{margin:0;color:var(--sub);font-size:.88rem}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin:16px 0}
+  h2{font-size:1.05rem;margin:0 0 12px;display:flex;align-items:center;gap:8px}
+  h2 .n{background:var(--accent);color:#fff;width:22px;height:22px;border-radius:50%;
+    display:grid;place-items:center;font-size:.78rem;flex:none}
+  label{display:block;font-size:.82rem;color:var(--sub);margin:10px 0 4px}
+  input,select,button{font:inherit;color:inherit}
+  input,select{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;background:var(--bg)}
+  .row{display:grid;grid-template-columns:1fr 130px;gap:10px}
+  @media(max-width:560px){.row{grid-template-columns:1fr}}
+  button{cursor:pointer;border:0;border-radius:9px;padding:11px 18px;background:var(--accent);
+    color:#fff;font-weight:600}
+  button.ghost{background:transparent;color:var(--accent);border:1px solid var(--accent)}
+  button.mini{padding:5px 10px;font-size:.78rem;font-weight:400}
+  .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+  .tabs{display:flex;gap:8px;margin:14px 0 4px}
+  .tabs button{flex:1;background:transparent;border:1px solid var(--line);color:var(--sub);font-weight:500}
+  .tabs button[aria-selected="true"]{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:600}
+  .seat{display:flex;gap:12px;align-items:flex-start;padding:13px 0;border-top:1px solid var(--line)}
+  .seat:first-child{border-top:0}
+  .chip{width:38px;height:38px;border-radius:10px;display:grid;place-items:center;color:#fff;
+    font-weight:700;font-size:1.05rem;flex:none}
+  .seat b{display:block;font-size:.98rem;margin-bottom:5px}
+  .seat span{font-size:.84rem;color:var(--sub)}
+  .kv{display:block;margin-top:6px;line-height:1.75}
+  .seat b em{font-style:normal;font-size:.72rem;font-weight:500;color:var(--accent);
+    border:1px solid var(--accent);border-radius:20px;padding:1px 8px;margin-left:8px;
+    vertical-align:2px;white-space:nowrap}
+  .q{margin:14px 0;padding:12px;border:1px solid var(--line);border-radius:10px}
+  .q p{margin:0 0 8px;font-size:.9rem;font-weight:600}
+  .q .opt{display:block;padding:6px 2px;font-size:.87rem;cursor:pointer}
+  .q .opt input{width:auto;margin-right:7px}
+  .members{list-style:none;padding:0;margin:14px 0 0}
+  .members li{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--line);font-size:.9rem}
+  .members li:first-child{border-top:0}
+  .dot{width:12px;height:12px;border-radius:50%;flex:none}
+  .dot.est{border:2px dashed var(--sub);background:transparent!important}
+  .grow{flex:1;min-width:0}
+  .muted{color:var(--sub);font-size:.8rem}
+  .tag{font-size:.68rem;border:1px solid var(--sub);color:var(--sub);border-radius:20px;padding:1px 7px;margin-left:5px}
+  #figure{width:100%;height:auto;display:block;margin:0 auto}
+  .legend{display:flex;gap:15px;justify-content:center;flex-wrap:wrap;font-size:.78rem;color:var(--sub);margin-top:8px}
+  .legend i{display:inline-block;width:20px;height:0;border-top:2px solid;vertical-align:middle;margin-right:5px}
+  .read{border-left:3px solid var(--line);padding:2px 0 2px 13px;margin:14px 0}
+  .read b{display:block;font-size:.94rem}
+  .read span{font-size:.85rem;color:var(--sub)}
+  .bridge{background:rgba(123,94,167,.08);border:1px solid var(--accent);border-radius:11px;padding:14px;margin:12px 0;font-size:.9rem}
+  .bridge b{color:var(--accent)}
+  .empty{color:var(--sub);font-size:.87rem;text-align:center;padding:24px 0}
+  .bal{display:flex;gap:6px;margin-top:10px}
+  .bal div{flex:1;text-align:center;border-radius:7px;padding:7px 0;font-size:.8rem;color:#fff}
+  footer{margin-top:26px;font-size:.75rem;color:var(--sub);line-height:1.7}
+  .hide{display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>職場の相関図</h1>
+  <p>あなたの生年月日だけで始められます。相手の誕生日は、知らなくて大丈夫です</p>
+</header>
+
+<div class="card">
+  <h2><span class="n">1</span>あなたの生年月日</h2>
+  <div class="row">
+    <div><label>生年月日</label><input type="date" id="meBirth" min="1930-01-01"></div>
+    <div><label>表示名</label><input type="text" id="meName" value="わたし"></div>
+  </div>
+  <div class="btns"><button id="setMe">はじめる</button></div>
+  <p class="muted" style="margin-top:10px">生まれた時間は要りません。生年月日だけで分かります。</p>
+</div>
+
+<div class="card hide" id="seatCard">
+  <h2><span class="n">2</span>どんな人が味方で、どんな人が苦手か</h2>
+  <p class="muted" style="margin:-6px 0 10px">
+    あなたの生年月日だけで、ここまで決まります。相手が誰かは、まだ分からなくて大丈夫です。<b id="meLine"></b></p>
+  <div id="seatList"></div>
+</div>
+
+<div class="card hide" id="addCard">
+  <h2><span class="n">3</span>職場の人を足していく</h2>
+  <div class="row">
+    <div><label>名前（ニックネーム可）</label><input type="text" id="pName" placeholder="田中部長"></div>
+    <div><label>立場</label>
+      <select id="pRole">
+        <option value="boss">上司</option><option value="senior">先輩</option>
+        <option value="peer" selected>同僚</option><option value="junior">後輩</option>
+        <option value="sub">部下</option><option value="other">その他</option>
+      </select></div>
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button id="tabEst" role="tab" aria-selected="true">誕生日を知らない</button>
+    <button id="tabBirth" role="tab" aria-selected="false">誕生日が分かる</button>
+  </div>
+
+  <div id="paneEst">
+    <p class="muted">4つの質問に答えると、その人がどのタイプかを推測します。
+      <b>あくまで推測です。</b>あとで誕生日が分かったら、正確なものに差し替えられます。</p>
+    <div id="questions"></div>
+  </div>
+  <div id="paneBirth" class="hide">
+    <label>その人の生年月日</label>
+    <input type="date" id="pBirth" min="1930-01-01">
+    <p class="muted">生まれた年まで正確に分かるときだけ使ってください。1年ちがうと結果が変わります。</p>
+  </div>
+
+  <div class="btns"><button id="addBtn">図に加える</button></div>
+  <ul class="members" id="memberList"></ul>
+</div>
+
+<div class="card hide" id="figCard">
+  <h2><span class="n">4</span>あなたの職場</h2>
+  <svg id="figure" viewBox="0 0 560 470" role="img" aria-label="職場の相関図"></svg>
+  <div class="legend">
+    <span><i style="border-color:var(--sei)"></i>矢印の先を助ける</span>
+    <span><i style="border-color:var(--koku)"></i>矢印の先に気を使わせる</span>
+    <span><i style="border-color:var(--hiwa);border-top-style:dashed"></i>似ている</span>
+    <span>丸が点線＝推測</span>
+  </div>
+  <div class="bal" id="balance"></div>
+</div>
+
+<div class="card hide" id="readCard">
+  <h2><span class="n">5</span>ひとりずつの読み方</h2>
+  <div id="readings"></div>
+</div>
+
+<div class="card hide" id="bridgeCard">
+  <h2><span class="n">6</span>ぶつかる相手と、間に入ってもらう人</h2>
+  <p class="muted" style="margin:-4px 0 6px">
+    ここは全員が図にそろって、はじめて出てくる答えです。ふたりだけを見る相性占いでは出せません。</p>
+  <div id="bridges"></div>
+</div>
+
+<div class="btns hide" id="tools"><button class="ghost" id="resetBtn">最初からやり直す</button></div>
+
+<footer>
+  ※ この内容は生年月日から読みとった傾向をまとめたもので、その人の評価や能力を判定するものではありません。
+  採用・評価・配置などの判断には使わないでください。読みものとしてお楽しみください。<br>
+  ※ 入力した内容はこのブラウザの中だけに保存されます。どこにも送られません。
+</footer>
+
+</div>
+
+<script>
+/* ===== 四柱推命コア（engine.py / ShichuSuimei の移植） ===== */
+const TENKAN=["甲","乙","丙","丁","戊","己","庚","辛","壬","癸"];
+const CHISHI=["子","丑","寅","卯","辰","巳","午","未","申","酉","戌","亥"];
+const GOGYO_ORDER=["木","火","土","金","水"];   // 相生順。+1で生、+2で剋
+const GOGYO_COLOR={"木":"var(--moku)","火":"var(--ka)","土":"var(--do)","金":"var(--kin)","水":"var(--sui)"};
+const INYO=["陽","陰"];
+const JIKKAN_MEANING={"甲":"大木のごとき強い意志とリーダーシップ","乙":"草花のようなしなやかさと適応力",
+ "丙":"太陽のごとき明朗さとカリスマ性","丁":"灯火のごとき繊細さと内なる情熱","戊":"山岳のごとき安定感と包容力",
+ "己":"大地のごとき母性と献身性","庚":"鋼鉄のごとき正義感と決断力","辛":"宝石のごとき美意識と鋭い感性",
+ "壬":"大河のごとき自由さと知恵","癸":"雨露のごとき優しさと直感力"};
+const TSUHENSEI=["比肩","劫財","食神","傷官","偏財","正財","偏官","正官","偏印","印綬"];
+const TSUHENSEI_NOTE={"比肩":"自立・競争","劫財":"大胆・波乱","食神":"楽観・才能発揮","傷官":"感性・反骨精神",
+ "偏財":"社交・商才","正財":"堅実・信用","偏官":"行動力・改革","正官":"責任感・出世",
+ "偏印":"独創性・学問","印綬":"知性・庇護"};
+/* 陰陽が不明（推定）のときは、正/偏を確定できないので系統名までに留める */
+const KEITO=["比劫","食傷","財","官殺","印"];
+const REL_SUMMARY=["似ている相手","あなたが面倒を見る相手","あなたが強く出られる相手",
+                   "あなたが気を使う相手","あなたを助けてくれる相手"];
+/* desc は「こんな人：」の後に続けて読ませる（主語はその人）。
+   short は文中に差し込む名詞句。両方を用意しないと、どちらかが不自然になる。 */
+const GOGYO_TRAITS={
+ "木":{label:"引っぱるタイプ",
+   desc:"このタイプの人は、自分で方針を決めて先に進んでいきます。そして、筋が通らないことを強く嫌がります。",
+   short:"自分で決めて引っぱっていく人"},
+ "火":{label:"感情が出るタイプ",
+   desc:"このタイプの人は、明るくて勢いがあります。そして、機嫌がそのまま顔や態度に出ます。",
+   short:"明るくて、機嫌が顔に出る人"},
+ "土":{label:"受けとめるタイプ",
+   desc:"このタイプの人は、よく人の面倒を見ます。いっぽうで、急な変化を嫌がります。",
+   short:"面倒見がよくて、落ち着いている人"},
+ "金":{label:"きっちりタイプ",
+   desc:"このタイプの人は、正確さにこだわります。そして、細かいところによく気がつきます。",
+   short:"正確で、細かいところに気がつく人"},
+ "水":{label:"合わせるタイプ",
+   desc:"このタイプの人は、誰とでも合わせます。いっぽうで、本音をなかなか見せません。",
+   short:"誰とでも合わせるが、本音を見せない人"}};
+const ROLE_LABEL={self:"あなた",boss:"上司",senior:"先輩",peer:"同僚",junior:"後輩",sub:"部下",other:"その他"};
+const ROLE_RANK={self:0,boss:1,senior:1,peer:0,junior:-1,sub:-1,other:0};
+const READING={
+ "0|1":"この人はあなたと似たタイプで、しかも目上にあたります。考え方が近いので、あなたは話を通しやすくなります。ただし、この人もあなたと同じことをやりたがるため、ぶつかることがあります。",
+ "0|0":"この人はあなたと似たタイプです。話は通じやすいのですが、この人とあなたは役割が重なりやすく、張り合いになることがあります。",
+ "0|-1":"この人はあなたと似たタイプで、立場はあなたより下です。自分を見ているように感じるぶん、あなたはつい厳しく言ってしまいがちです。",
+ "1|1":"この人は目上ですが、あなたが支える側にまわります。あなたがこの人を立てているうちに、あなた自身が消耗しやすくなります。",
+ "1|0":"この人に対して、あなたは面倒を見る側になります。頼られること自体は悪くありませんが、あなたが抱えすぎないよう気をつけてください。",
+ "1|-1":"この人に対して、あなたは育てる側になります。あなたが教えたり引き上げたりする関係が、無理なく回ります。",
+ "2|1":"この人は目上ですが、あなたのほうが強く出られます。そのぶん噛み合わず、あなたはやりにくさを感じやすくなります。",
+ "2|0":"この人に対して、あなたは主導権を取りやすくなります。話が通るぶん、あなたが押しすぎないよう気をつけてください。",
+ "2|-1":"この人には、あなたの指示が通りやすくなります。あなたが任せると、うまく回ります。",
+ "3|1":"この人に対して、あなたは気を使う側になります。あなたがこの人と話すたびに緊張してしまうのは、あなたが弱いからではなく、この組み合わせがそうさせています。",
+ "3|0":"この人とあなたは対等な立場ですが、あなたはこの人のペースに引っぱられやすくなります。気づくと、あなたが譲ってばかりになります。",
+ "3|-1":"この人はあなたより立場が下ですが、あなたのほうが気を使います。この人はあなたに強く出てくることがあります。",
+ "4|1":"この人はあなたを引き上げてくれます。あなたが困ったときは、遠慮せず頼って大丈夫です。",
+ "4|0":"この人はあなたを支えてくれます。あなたがひとりで抱えず、相談してみてください。",
+ "4|-1":"この人はあなたより立場が下ですが、あなたを支えてくれます。あなたが助けてもらうことを、遠慮しなくて大丈夫です。"};
+/* 設問は主語を毎回はっきり書く。体言止め・省略をしない（解釈が割れると推定が狂うため） */
+const QUESTIONS=[
+ {q:"その人は、機嫌が悪くなると、どうなりますか？",
+  a:[["黙ったまま正論で詰めてくる","木"],
+     ["不機嫌なのが顔や態度にそのまま出る","火"],
+     ["黙り込んで動かなくなる","土"],
+     ["細かいミスの指摘が増える","金"],
+     ["何を考えているか分からなくなる","水"]]},
+ {q:"その人は、仕事をどうやって進めますか？",
+  a:[["自分で方針を決めて、まわりを引っぱっていく","木"],
+     ["勢いで走り出して、まわりを巻き込む","火"],
+     ["決まった手順どおりに、こつこつ進める","土"],
+     ["細かいところまで詰めて、完成度にこだわる","金"],
+     ["そのときの状況に合わせて、やり方を変える","水"]]},
+ {q:"その人は、まわりの人とどうやって接しますか？",
+  a:[["上下関係をはっきりさせる","木"],
+     ["誰とでもすぐ打ち解ける","火"],
+     ["よく人の面倒を見る","土"],
+     ["一定の距離を保って踏み込ませない","金"],
+     ["誰とでも合わせるが本音は見せない","水"]]},
+ {q:"その人は、急に予定が変わったとき、どう反応しますか？",
+  a:[["自分から動いて状況を変えにいく","木"],
+     ["面白がってすぐ乗る","火"],
+     ["はっきり嫌がる","土"],
+     ["まず問題点やリスクを指摘する","金"],
+     ["文句を言わずするっと合わせる","水"]]}];
+
+function dayPillarIndex(y,m,d){
+  const diff=Math.round((Date.UTC(y,m-1,d)-Date.UTC(1900,0,1))/86400000);
+  return {ti:((diff+10)%10+10)%10, ci:((diff+10)%12+12)%12};
+}
+/* 確定（生年月日あり）と推定（五行のみ）の両方を同じ形にそろえる */
+function toPerson(m){
+  if(m.birth){
+    const [y,mo,d]=m.birth.split("-").map(Number);
+    const {ti,ci}=dayPillarIndex(y,mo,d), kan=TENKAN[ti];
+    return {name:m.name,role:m.role,roleLabel:ROLE_LABEL[m.role],estimated:false,
+      birth:m.birth,nichikan:kan,dayPillar:kan+CHISHI[ci],gogyo:GOGYO_ORDER[Math.floor(ti/2)],
+      inyo:INYO[ti%2],meaning:JIKKAN_MEANING[kan],ti,elem:Math.floor(ti/2)};
+  }
+  const e=GOGYO_ORDER.indexOf(m.gogyo);
+  return {name:m.name,role:m.role,roleLabel:ROLE_LABEL[m.role],estimated:true,
+    confidence:m.confidence,gogyo:m.gogyo,nichikan:m.gogyo,
+    meaning:GOGYO_TRAITS[m.gogyo].desc,ti:null,elem:e};
+}
+function estimateGogyo(ans){
+  const c={}; GOGYO_ORDER.forEach(g=>c[g]=0); ans.forEach(a=>{if(a in c)c[a]++});
+  let top=GOGYO_ORDER[0]; GOGYO_ORDER.forEach(g=>{if(c[g]>c[top])top=g;});
+  return {gogyo:top, confidence:c[top]/(ans.length||1)};
+}
+function seats(me){
+  const i=me.elem;
+  return [
+   {e:(i-2+5)%5,title:"あなたが気を使ってしまう人",
+    note:"このタイプの人といると、あなたが気を使います。あなたがその人を嫌いという意味ではありません。"
+        +"あなたのほうが緊張したり、疲れたりしやすい、ということです。苦手な上司は、たいていこのタイプです。"},
+   {e:(i-1+5)%5,title:"あなたを助けてくれる人",
+    note:"このタイプの人は、あなたを引き上げてくれます。あなたが困ったときに頼ると、いちばん効きます。"},
+   {e:i,        title:"あなたと似ている人",
+    note:"このタイプの人は、あなたと考え方が近いので、話が早く通じます。"
+        +"ただし、この人はあなたと同じことをやりたがるので、ぶつかることもあります。"},
+   {e:(i+1)%5,  title:"あなたが面倒を見ることになる人",
+    note:"このタイプの人に対しては、あなたが与える側になります。"
+        +"頼られるのは悪いことではありませんが、あなたの疲れがたまりやすくなります。"},
+   {e:(i+2)%5,  title:"あなたが強く出られる人",
+    note:"このタイプの人に対しては、あなたのほうが主導権を持ちます。"
+        +"話は通りますが、あなたが言いすぎないよう気をつけてください。"}
+  ].map(s=>({...s,gogyo:GOGYO_ORDER[s.e],trait:GOGYO_TRAITS[GOGYO_ORDER[s.e]]}));
+}
+/* 関係。向きは五行だけで決まるので、推定の相手でも正しく出せる。
+   正/偏の区別だけが陰陽を要するため、推定時は系統名までに留める。 */
+function relation(a,b){
+  const rel=(b.elem-a.elem+5)%5;
+  const exact = a.ti!==null && b.ti!==null;
+  const idx = exact ? rel*2+(((a.ti%2)===(b.ti%2))?0:1) : null;
+  let edge;
+  if(rel===0)      edge={src:a.name,dst:b.name,type:"比和"};
+  else if(rel===1) edge={src:a.name,dst:b.name,type:"生"};
+  else if(rel===2) edge={src:a.name,dst:b.name,type:"剋"};
+  else if(rel===3) edge={src:b.name,dst:a.name,type:"剋"};
+  else             edge={src:b.name,dst:a.name,type:"生"};
+  return {from:a.name,to:b.name,rel,edge,exact,
+    star: exact?TSUHENSEI[idx]:KEITO[rel],
+    note: exact?TSUHENSEI_NOTE[TSUHENSEI[idx]]:"推測のため大まかな分類まで",
+    summary:REL_SUMMARY[rel], reading:READING[rel+"|"+(ROLE_RANK[b.role]??0)]};
+}
+const tsukanElement=e=>(e+1)%5;
+function buildMap(members){
+  const people=members.map(toPerson);
+  const me=people.find(p=>p.role==="self")||people[0];
+  const edges=[];
+  for(let i=0;i<people.length;i++)for(let j=i+1;j<people.length;j++)edges.push(relation(people[i],people[j]).edge);
+  const by=Object.fromEntries(people.map(p=>[p.name,p]));
+  const bridges=edges.filter(e=>e.type==="剋").map(e=>{
+    const src=by[e.src],dst=by[e.dst],need=tsukanElement(src.elem),needName=GOGYO_ORDER[need];
+    const br=people.filter(p=>p.elem===need&&p.name!==src.name&&p.name!==dst.name);
+    return {src:e.src,dst:e.dst,needName,
+      advice: br.length
+        ? `<b>${br.map(p=>p.name+(p.estimated?"（推測）":"")).join("・")}</b>に、あいだへ入ってもらうと話が通りやすくなります。${e.src}と${e.dst}が直接やりとりする前に、一度${br.length>1?"この人たちのどちらか":"この人"}を通してみてください。`
+        : `あいだに入ってもらえる人が、今の図にいません。<b>${GOGYO_TRAITS[needName].short}</b>が職場にいたら、その人を図に加えてみてください。`};
+  });
+  const balance={}; GOGYO_ORDER.forEach(g=>balance[g]=0); people.forEach(p=>balance[p.gogyo]++);
+  return {me,people,edges,bridges,balance,
+    fromMe:people.filter(p=>p.name!==me.name).map(p=>relation(me,p))};
+}
+
+/* ===== 状態（localStorage）＝図が育つ仕組み ===== */
+const KEY="misaki_soukanzu_v2";
+let members=JSON.parse(localStorage.getItem(KEY)||"[]");
+const save=()=>localStorage.setItem(KEY,JSON.stringify(members));
+const $=id=>document.getElementById(id);
+
+/* ===== 描画 ===== */
+function drawFigure(map){
+  const svg=$("figure"),W=560,H=470,cx=W/2,cy=H/2-6;
+  const others=map.people.filter(p=>p.name!==map.me.name);
+  const R=others.length<=2?128:others.length<=4?156:172;
+  const pos={[map.me.name]:{x:cx,y:cy}};
+  others.forEach((p,i)=>{const a=-Math.PI/2+i*2*Math.PI/others.length;
+    pos[p.name]={x:cx+R*Math.cos(a),y:cy+R*Math.sin(a)};});
+  const NS="http://www.w3.org/2000/svg";
+  const el=(t,at)=>{const n=document.createElementNS(NS,t);for(const k in at)n.setAttribute(k,at[k]);return n;};
+  svg.innerHTML="";
+  const defs=el("defs");
+  [["ar-sei","var(--sei)"],["ar-koku","var(--koku)"]].forEach(([id,c])=>{
+    const mk=el("marker",{id,viewBox:"0 0 10 10",refX:"9",refY:"5",markerWidth:"5",markerHeight:"5",
+      orient:"auto-start-reverse"});
+    mk.appendChild(el("path",{d:"M0,0 L10,5 L0,10 z",fill:c})); defs.appendChild(mk);});
+  svg.appendChild(defs);
+  map.edges.forEach(e=>{
+    const s=pos[e.src],d=pos[e.dst]; if(!s||!d)return;
+    const dx=d.x-s.x,dy=d.y-s.y,len=Math.hypot(dx,dy)||1;
+    const rs=(e.src===map.me.name?40:32),rd=(e.dst===map.me.name?40:32);
+    const isK=e.type==="剋",isH=e.type==="比和";
+    svg.appendChild(el("line",{x1:s.x+dx/len*rs,y1:s.y+dy/len*rs,
+      x2:d.x-dx/len*(rd+6),y2:d.y-dy/len*(rd+6),
+      stroke:isH?"var(--hiwa)":(isK?"var(--koku)":"var(--sei)"),
+      "stroke-width":isK?2.2:1.8,"stroke-dasharray":isH?"4 4":"",opacity:isH?.5:.85,
+      "marker-end":isH?"":(isK?"url(#ar-koku)":"url(#ar-sei)")}));
+  });
+  map.people.forEach(p=>{
+    const {x,y}=pos[p.name],isMe=p.name===map.me.name,r=isMe?40:32;
+    svg.appendChild(el("circle",{cx:x,cy:y,r,fill:GOGYO_COLOR[p.gogyo],
+      stroke:isMe?"var(--accent)":(p.estimated?"var(--sub)":"rgba(0,0,0,.12)"),
+      "stroke-width":isMe?3:(p.estimated?2:1),
+      "stroke-dasharray":p.estimated?"5 4":""}));
+    const k=el("text",{x,y:y+(isMe?2:1),"text-anchor":"middle","dominant-baseline":"middle",
+      fill:"#fff","font-size":isMe?22:19,"font-weight":"700"});
+    k.textContent=p.nichikan; svg.appendChild(k);
+    const nm=el("text",{x,y:y+r+16,"text-anchor":"middle",fill:"var(--ink)","font-size":12,
+      "font-weight":isMe?"700":"500"}); nm.textContent=p.name; svg.appendChild(nm);
+    const rl=el("text",{x,y:y+r+30,"text-anchor":"middle",fill:"var(--sub)","font-size":10.5});
+    rl.textContent=isMe?`${p.gogyo}の${p.inyo}`:`${p.roleLabel}・${p.gogyo}${p.estimated?"（推測）":""}`;
+    svg.appendChild(rl);
+  });
+  $("balance").innerHTML=GOGYO_ORDER.map(g=>
+    `<div style="background:${GOGYO_COLOR[g]};opacity:${map.balance[g]?1:.28}">${g} ${map.balance[g]}</div>`).join("");
+}
+
+function renderQuestions(){
+  $("questions").innerHTML=QUESTIONS.map((q,i)=>`<div class="q"><p>${i+1}. ${q.q}</p>
+    ${q.a.map(([t,g],j)=>`<label class="opt"><input type="radio" name="q${i}" value="${g}"${j===0?"":""}> ${t}</label>`).join("")}
+    </div>`).join("");
+}
+
+function render(){
+  const meM=members.find(m=>m.role==="self");
+  $("seatCard").classList.toggle("hide",!meM);
+  $("addCard").classList.toggle("hide",!meM);
+  $("tools").classList.toggle("hide",!meM);
+
+  if(meM){
+    const me=toPerson(meM);
+    $("meLine").textContent=`（あなたは「${me.nichikan}」＝${GOGYO_TRAITS[me.gogyo].label}）`;
+    $("seatList").innerHTML=seats(me).map(s=>`<div class="seat">
+      <span class="chip" style="background:${GOGYO_COLOR[s.gogyo]}">${s.gogyo}</span>
+      <span class="grow"><b>${s.title}<em>${s.trait.label}</em></b>
+        <span class="kv">${s.trait.desc}</span>
+        <span class="kv">${s.note}</span>
+      </span></div>`).join("");
+  }
+
+  $("memberList").innerHTML=members.map((m,i)=>{
+    const p=toPerson(m);
+    return `<li><span class="dot ${p.estimated?"est":""}" style="background:${GOGYO_COLOR[p.gogyo]}"></span>
+      <span class="grow"><b>${p.name}</b>
+      <span class="muted">${p.roleLabel}・${p.gogyo}${p.estimated?"":"（"+p.nichikan+"）"}</span>
+      ${p.estimated?'<span class="tag">推測</span>':""}</span>
+      ${m.role==="self"?"":`<button class="ghost mini" data-del="${i}">外す</button>`}</li>`;
+  }).join("");
+  document.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{
+    members.splice(+b.dataset.del,1);save();render();});
+
+  const ready=members.length>=2;
+  ["figCard","readCard","bridgeCard"].forEach(id=>$(id).classList.toggle("hide",!ready));
+  if(!ready)return;
+
+  const map=buildMap(members);
+  drawFigure(map);
+  $("readings").innerHTML=map.fromMe.map(r=>`<div class="read">
+    <b>${r.to} ── ${r.star}${r.exact?`（${r.note}）`:"（推測）"}／${r.summary}</b>
+    <span>${r.reading}</span></div>`).join("");
+  $("bridges").innerHTML=map.bridges.length
+    ? map.bridges.map(b=>`<div class="bridge"><b>${b.src}</b>が<b>${b.dst}</b>に気を使わせる組み合わせです。
+        <div style="margin-top:6px">${b.advice}</div></div>`).join("")
+    : `<p class="empty">いまのところ、ぶつかり合う組み合わせはありません。<br>人を足すと変わることがあります。</p>`;
+}
+
+let mode="est";
+$("tabEst").onclick=()=>{mode="est";$("tabEst").ariaSelected="true";$("tabBirth").ariaSelected="false";
+  $("paneEst").classList.remove("hide");$("paneBirth").classList.add("hide");};
+$("tabBirth").onclick=()=>{mode="birth";$("tabBirth").ariaSelected="true";$("tabEst").ariaSelected="false";
+  $("paneBirth").classList.remove("hide");$("paneEst").classList.add("hide");};
+
+$("setMe").onclick=()=>{
+  const b=$("meBirth").value,n=($("meName").value||"わたし").trim();
+  if(!b){alert("生年月日を入れてください");return;}
+  members=members.filter(m=>m.role!=="self");
+  members.unshift({name:n,birth:b,role:"self"});
+  save();render();$("seatCard").scrollIntoView({behavior:"smooth"});
+};
+$("addBtn").onclick=()=>{
+  const n=$("pName").value.trim(),r=$("pRole").value;
+  if(!n){alert("名前を入れてください");return;}
+  if(members.some(m=>m.name===n)){alert("その名前の人は、もう図に入っています");return;}
+  if(mode==="birth"){
+    const b=$("pBirth").value;
+    if(!b){alert("生年月日を入れてください");return;}
+    members.push({name:n,birth:b,role:r});
+    $("pBirth").value="";
+  }else{
+    const ans=QUESTIONS.map((_,i)=>{
+      const el=document.querySelector(`input[name="q${i}"]:checked`);return el?el.value:null;});
+    if(ans.some(a=>!a)){alert("4つの質問すべてに答えてください");return;}
+    const {gogyo,confidence}=estimateGogyo(ans);
+    members.push({name:n,gogyo,confidence,role:r});
+    renderQuestions();
+  }
+  $("pName").value="";save();render();
+};
+$("resetBtn").onclick=()=>{
+  if(!confirm("図に入れた人を全部消します。よろしいですか？"))return;
+  members=[];save();location.reload();
+};
+
+renderQuestions();
+const meM=members.find(m=>m.role==="self");
+if(meM){$("meBirth").value=meM.birth;$("meName").value=meM.name;}
+render();
+</script>
+</body>
+</html>

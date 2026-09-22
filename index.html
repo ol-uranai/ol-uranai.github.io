@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>あなたの日干を出す ｜ 職場の四柱推命</title>
+<meta name="description" content="生年月日を入れるだけ。四柱推命の「日干」を10秒で出します。職場で自分がどう見られやすいか、その型が分かります。">
+<!--
+  ②判定層（ARCHITECTURE.md）。生年月日 → 日干（10種）を出すだけの1枚。
+
+  ■ なぜこのページが要るか
+    日干は生年月日から60日周期で決まる。星座のように誕生日で自明ではなく、
+    MBTIのような有名な無料診断も無い。つまり読者は自分の日干を知る手段がない。
+    日干別記事（10本）はこのページが無いと入口を持てない。
+
+  ■ ロジックの正本
+    ../ultimate_fortune_sanctuary.py の ShichuSuimei。ここはその JS 移植。
+    1930-01-01〜2035-12-31 の 38,716 日で Python 正本と全件一致を確認済み
+    （1900/1/1=甲・2000/1/1=戊 を万年暦と照合）。式を変えるときは必ず再検算すること。
+
+  ■ 法務（全社ルール）
+    ・成果を約束しない（当たる／良くなる、は書かない）
+    ・人物を断定しない。出すのは「型」であって評価ではない
+    ・免責を必ず footer に置く
+-->
+<style>
+  :root{
+    --bg:#efe9dc; --card:#faf7f0; --ink:#1d1a22; --sub:#6b6459;
+    --line:#ddd5c6; --shu:#9e2b25;
+    --moku:#3f7e57; --ka:#c05a3e; --do:#a8803f; --kin:#8a7a3e; --sui:#3a6b93;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{ --bg:#17151a; --card:#211e26; --ink:#ece8f0; --sub:#a49cae; --line:#332e3b; --shu:#c4564e; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);line-height:1.8;
+    font-family:"Hiragino Mincho ProN","Yu Mincho",serif;-webkit-text-size-adjust:100%}
+  .wrap{max-width:680px;margin:0 auto;padding:30px 20px 72px}
+  header{text-align:center;padding:10px 0 4px}
+  .seal{display:inline-grid;place-items:center;width:52px;height:52px;
+    background:var(--shu);color:#f6f2e8;font-size:1.5rem;margin-bottom:12px}
+  h1{font-size:1.5rem;margin:0 0 8px;letter-spacing:.04em}
+  header p{margin:0;color:var(--sub);font-size:.92rem}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:22px;margin:22px 0}
+  label{display:block;font-size:.92rem;color:var(--sub);margin-bottom:8px}
+  input[type=date]{width:100%;font:inherit;font-size:1.15rem;padding:12px 14px;
+    border:1px solid var(--line);border-radius:8px;background:transparent;color:var(--ink)}
+  button{width:100%;margin-top:14px;font:inherit;font-size:1.05rem;padding:13px;
+    border:0;border-radius:8px;background:var(--shu);color:#f6f2e8;cursor:pointer;letter-spacing:.1em}
+  button:hover{opacity:.9}
+  .out{display:none}
+  .out.on{display:block}
+  .kan{display:flex;align-items:center;gap:18px;border-bottom:1px solid var(--line);
+    padding-bottom:16px;margin-bottom:16px}
+  .kan .big{font-size:3.4rem;line-height:1;width:84px;height:84px;display:grid;
+    place-items:center;background:var(--shu);color:#f6f2e8;flex:0 0 auto}
+  .kan .name{font-size:1.9rem;letter-spacing:.04em}
+  .kan .meta{color:var(--sub);font-size:.9rem}
+  .lead{margin:0 0 14px}
+  .verdict{margin:0 0 12px;padding:11px 14px;font-size:.96rem;line-height:1.7;
+    background:rgba(158,43,37,.07);border-left:2px solid var(--shu)}
+  .verdict:empty{display:none}
+  .verdict b{color:var(--shu)}
+  .note{color:var(--sub);font-size:.88rem}
+  .go{display:block;text-align:center;margin-top:18px;padding:13px;
+    border:1px solid var(--shu);border-radius:8px;color:var(--shu);text-decoration:none}
+  .go:hover{background:var(--shu);color:#f6f2e8}
+  .list{margin:26px 0 0;padding:0;list-style:none;
+    display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px}
+  .list li{border:1px solid var(--line);border-radius:8px;padding:9px 11px;font-size:.9rem}
+  .list b{font-weight:600}
+  .list span{color:var(--sub);font-size:.82rem}
+  footer{margin-top:40px;padding-top:18px;border-top:1px solid var(--line);
+    color:var(--sub);font-size:.8rem;line-height:1.7}
+  footer a{color:var(--sub)}
+  h2{font-size:1.02rem;margin:30px 0 8px;letter-spacing:.04em}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="seal">命</div>
+  <h1>あなたの日干を出す</h1>
+  <p>生年月日を入れるだけ。10秒で、あなたの型が分かります。</p>
+</header>
+
+<div class="card">
+  <label for="b">生年月日</label>
+  <input type="date" id="b" min="1930-01-01" max="2035-12-31">
+  <button id="go">日干を出す</button>
+  <p class="note" style="margin:12px 0 0">
+    入力した日付はこの端末の中だけで計算します。どこにも送信していません。
+  </p>
+</div>
+
+<div class="card out" id="out">
+  <div class="kan">
+    <div class="big" id="k"></div>
+    <div>
+      <div class="name" id="t"></div>
+      <div class="meta" id="m"></div>
+    </div>
+  </div>
+  <p class="verdict" id="verdict"></p>
+  <p class="lead" id="lead"></p>
+  <!--
+    行き先は「該当の記事」1つだけ。相関図へは送らない。
+    この時点の読者はまだ職場の誰かを思い浮かべていない（「あの人だ」は記事の中で起きる）。
+    空の図を見せても入れる人が決まらず、そのまま帰る。相関図の出番は記事の終わり。
+
+    記事から ?from=辛 を付けて来た場合だけ、一致/不一致で言い方を変える。
+    不一致のまま元の記事へ返すと「当たってなかった」で離脱する。正しい記事へ渡すのが仕事。
+  -->
+  <a class="go" id="art" href="#">あなたの記事を読む</a>
+</div>
+
+<h2>全部で10種類しかない</h2>
+<ul class="list" id="all"></ul>
+
+<footer>
+  本ページは四柱推命の考え方にもとづく<b>娯楽コンテンツ</b>です。医療・法律・投資・
+  その他の専門的判断の代わりになるものではありません。結果は個人の性質を断定するもの
+  ではなく、成果を保証するものでもありません。<br>
+  日干は生年月日から算出しています（出生時刻は使いません）。<br>
+  <a href="https://note.com/ol_uranai">OL占い師ミサキ（note）</a>
+</footer>
+
+</div>
+
+<script>
+/* ── ロジック。Python正本と 1930-2035 の全日で一致を確認済み ── */
+const TENKAN = ["甲","乙","丙","丁","戊","己","庚","辛","壬","癸"];
+const GOGYO  = ["木","木","火","火","土","土","金","金","水","水"];
+const INYO   = ["陽","陰"];
+const BASE   = Date.UTC(1900,0,1);           // 1900/1/1 = 甲（万年暦照合済み）
+
+function nikkan(y,m,d){
+  const diff = Math.round((Date.UTC(y,m-1,d) - BASE)/86400000);
+  return ((diff+10)%10+10)%10;
+}
+
+/* たとえ・一言。四柱推命の正統な見立てに沿う。評価語は使わない */
+const TYPE = {
+  "甲":{t:"大木", lead:"まっすぐ伸びる木。筋を通す力がある一方、正論がそのまま通ると思われやすく、まわりが身構えることがあります。"},
+  "乙":{t:"草花", lead:"しなやかに伸びる草。場に合わせるのが上手いぶん、「で、あなたはどうしたいの」と言われることがあります。"},
+  "丙":{t:"太陽", lead:"全方位に届く光。悪気なく場の中心になるため、本人の意図と関係なく空気が動きます。"},
+  "丁":{t:"灯火", lead:"手元を照らす灯り。近い相手を深く照らすぶん、距離の差が態度に出やすくなります。"},
+  "戊":{t:"山",   lead:"動かない山。守る力が強いぶん、変化の場面で「頑固」と受け取られることがあります。"},
+  "己":{t:"大地", lead:"何でも受けとめる土。頼まれごとが集まりやすく、気づくと抱えすぎています。"},
+  "庚":{t:"刀",   lead:"鍛えられた鉄。白黒をつける力がある一方、正しさがそのまま刃になることがあります。"},
+  "辛":{t:"宝石", lead:"磨かれた宝石。細かい違いに気づけるぶん、気づいたことを言えずに溜め込みやすくなります。"},
+  "壬":{t:"海",   lead:"大きく流れる水。自分の流れで動くため、細かく管理されると窮屈になります。"},
+  "癸":{t:"雨",   lead:"静かに沁みる雨。察する力が強いぶん、頼まれる前に動いて消耗しがちです。"}
+};
+
+/* 公開後にここへ記事URLを入れる。空なら一覧へ送る */
+const ARTICLE = {
+  "甲":"", "乙":"", "丙":"", "丁":"", "戊":"",
+  "己":"", "庚":"", "辛":"", "壬":"", "癸":""
+};
+const FALLBACK = "https://note.com/ol_uranai";
+
+const $ = id => document.getElementById(id);
+
+/* どの記事から来たか（?from=辛）。無ければ null */
+const FROM = (() => {
+  const f = new URLSearchParams(location.search).get("from");
+  return TENKAN.includes(f) ? f : null;
+})();
+
+function show(){
+  const v = $("b").value;
+  if(!v){ $("b").focus(); return; }
+  const [y,m,d] = v.split("-").map(Number);
+  const i = nikkan(y,m,d), kan = TENKAN[i];
+  $("k").textContent = kan;
+  $("t").textContent = TYPE[kan].t + "の人";
+  $("m").textContent = `日干 ${kan}　${GOGYO[i]}の${INYO[i%2]}`;
+  $("lead").textContent = TYPE[kan].lead;
+  $("art").href = ARTICLE[kan] || FALLBACK;
+
+  /* 記事から来た人には、一致したかどうかを先に言う。
+     外れたまま元の記事に返すと「当たってなかった」で終わる */
+  if(FROM === kan){
+    $("verdict").innerHTML = `さっき読んでいた記事で合っていたわ。<b>${TYPE[kan].t}の人</b>よ。`;
+    $("art").textContent = `${TYPE[kan].t}の人の記事にもどる`;
+  } else if(FROM){
+    $("verdict").innerHTML =
+      `読んでいたのは<b>${TYPE[FROM].t}の人</b>の記事ね。あなたは<b>${TYPE[kan].t}の人</b>よ。` +
+      `　あなたの記事はこちら。`;
+    $("art").textContent = `${TYPE[kan].t}の人の記事を読む`;
+  } else {
+    $("verdict").textContent = "";
+    $("art").textContent = `${TYPE[kan].t}の人の記事を読む`;
+  }
+
+  $("out").classList.add("on");
+  $("out").scrollIntoView({behavior:"smooth", block:"start"});
+}
+$("go").addEventListener("click", show);
+$("b").addEventListener("keydown", e => { if(e.key === "Enter") show(); });
+
+$("all").innerHTML = TENKAN.map((k,i) =>
+  `<li><b>${k}</b> ${TYPE[k].t}の人<br><span>${GOGYO[i]}の${INYO[i%2]}</span></li>`).join("");
+</script>
+</body>
+</html>
