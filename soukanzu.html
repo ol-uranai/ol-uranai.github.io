@@ -183,6 +183,17 @@
 </div>
 
 <script>
+/* 計測。生年月日も名前も送らない。送るのは「何人登録したか」だけ */
+const GC = "";
+function track(event, detail){
+  const path = detail ? `/${event}/${detail}` : `/${event}`;
+  if(!GC){ console.log("[track]", path); return; }
+  const u = new URL(`https://${GC}.goatcounter.com/count`);
+  u.searchParams.set("p", path); u.searchParams.set("t", event);
+  navigator.sendBeacon ? navigator.sendBeacon(u) : new Image().src = u;
+}
+track("soukanzu-view");
+
 /* ===== 四柱推命コア（engine.py / ShichuSuimei の移植） ===== */
 const TENKAN=["甲","乙","丙","丁","戊","己","庚","辛","壬","癸"];
 const CHISHI=["子","丑","寅","卯","辰","巳","午","未","申","酉","戌","亥"];

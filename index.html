@@ -91,7 +91,8 @@
   <input type="date" id="b" min="1930-01-01" max="2035-12-31">
   <button id="go">日干を出す</button>
   <p class="note" style="margin:12px 0 0">
-    入力した日付はこの端末の中だけで計算します。どこにも送信していません。
+    <b>生年月日は、この端末の中だけで計算します。どこにも送信しません。</b><br>
+    ページの閲覧数だけ集計しています（Cookieは使いません）。
   </p>
 </div>
 
@@ -124,6 +125,7 @@
   その他の専門的判断の代わりになるものではありません。結果は個人の性質を断定するもの
   ではなく、成果を保証するものでもありません。<br>
   日干は生年月日から算出しています（出生時刻は使いません）。<br>
+  <b>入力された生年月日は送信も保存もしていません。</b>ページが何回見られたかの集計のみ行っています。<br>
   <a href="https://note.com/ol_uranai">OL占い師ミサキ（note）</a>
 </footer>
 
@@ -157,18 +159,50 @@ const TYPE = {
 
 /* 公開後にここへ記事URLを入れる。空なら一覧へ送る */
 const ARTICLE = {
-  "甲":"", "乙":"", "丙":"", "丁":"", "戊":"",
-  "己":"", "庚":"", "辛":"", "壬":"", "癸":""
+  "甲": "https://note.com/ol_uranai/n/nb5472cb126d8",
+  "乙": "https://note.com/ol_uranai/n/n138761ab38b3",
+  "丙": "https://note.com/ol_uranai/n/n4275631d22c4",
+  "丁": "",
+  "戊": "",
+  "己": "",
+  "庚": "",
+  "辛": "https://note.com/ol_uranai/n/na9f5e9ae3fa1",
+  "壬": "",
+  "癸": "https://note.com/ol_uranai/n/n93d50d2d8b8d",
 };
 const FALLBACK = "https://note.com/ol_uranai";
-
-const $ = id => document.getElementById(id);
 
 /* どの記事から来たか（?from=辛）。無ければ null */
 const FROM = (() => {
   const f = new URLSearchParams(location.search).get("from");
   return TENKAN.includes(f) ? f : null;
 })();
+
+const $ = id => document.getElementById(id);
+
+/* ── 計測 ───────────────────────────────────────────────
+   ■ 絶対に守ること
+     **生年月日は送らない。** 送るのは「何をしたか」だけ。
+     日干（10種のどれか）までは送る。個人は特定できないため。
+     Cookieも使わない。
+
+   ■ つなぎ方
+     GoatCounter（無料・Cookieなし）を想定している。
+     アカウントを作って、下の GC に自分のコードを入れるだけで動き出すわ。
+     空のままなら何も送らない（コンソールに出るだけ）。
+────────────────────────────────────────────────────── */
+const GC = "";   // 例: "ol-uranai" → https://ol-uranai.goatcounter.com
+
+function track(event, detail) {
+  const path = detail ? `/${event}/${detail}` : `/${event}`;
+  if (!GC) { console.log("[track]", path); return; }
+  const u = new URL(`https://${GC}.goatcounter.com/count`);
+  u.searchParams.set("p", path);
+  u.searchParams.set("t", event);
+  navigator.sendBeacon ? navigator.sendBeacon(u) : new Image().src = u;
+}
+
+track("view", FROM ? "from-article" : "direct");
 
 function show(){
   const v = $("b").value;
@@ -196,10 +230,14 @@ function show(){
     $("art").textContent = `${TYPE[kan].t}の人の記事を読む`;
   }
 
+  track("shindan", kan);                       // 何が出たか（生年月日は送らない）
+  if (FROM) track(FROM === kan ? "match" : "mismatch", kan);
+
   $("out").classList.add("on");
   $("out").scrollIntoView({behavior:"smooth", block:"start"});
 }
 $("go").addEventListener("click", show);
+$("art").addEventListener("click", () => track("to-article", $("k").textContent || "?"));
 $("b").addEventListener("keydown", e => { if(e.key === "Enter") show(); });
 
 $("all").innerHTML = TENKAN.map((k,i) =>
