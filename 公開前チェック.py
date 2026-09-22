@@ -51,8 +51,11 @@ NG_PATTERNS: list[tuple[str, str]] = [
 ]
 
 # 外部への通信。判定ページは「生年月日を送らない」が売りなので、増えたら気づけるようにする
+# rel="canonical" と rel="alternate" は通信しない（検索エンジンへの申告）ので除く。
+# 通信するのは stylesheet / preconnect / dns-prefetch など。
 NET_PATTERNS = [r"\bfetch\s*\(", r"XMLHttpRequest", r"sendBeacon", r"new\s+Image\s*\(",
-                r"<script[^>]+src=", r"<link[^>]+href=[\"']https?://"]
+                r"<script[^>]+src=",
+                r"<link(?![^>]*rel=[\"'](canonical|alternate)[\"'])[^>]+href=[\"']https?://"]
 NET_ALLOW = ["goatcounter.com"]   # 計測。生年月日は送っていない
 
 
