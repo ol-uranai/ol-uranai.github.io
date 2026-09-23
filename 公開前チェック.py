@@ -56,7 +56,10 @@ NG_PATTERNS: list[tuple[str, str]] = [
 NET_PATTERNS = [r"\bfetch\s*\(", r"XMLHttpRequest", r"sendBeacon", r"new\s+Image\s*\(",
                 r"<script[^>]+src=",
                 r"<link(?![^>]*rel=[\"'](canonical|alternate)[\"'])[^>]+href=[\"']https?://"]
-NET_ALLOW = ["goatcounter.com"]   # 計測。生年月日は送っていない
+# 計測。**生年月日は送っていない**（送るのはイベント名と日干だけ）。
+#   gc.zgo.at は GoatCounter 公式の count.js の配布元。
+#   外部スクリプトはこの1本だけと決めている。増やすときは必ず中身を読むこと。
+NET_ALLOW = ["goatcounter.com", "gc.zgo.at"]
 
 
 def staged_files() -> list[Path]:
@@ -95,7 +98,11 @@ def check(files: list[Path]) -> list[str]:
         for pat in NET_PATTERNS:
             for m in re.finditer(pat, t):
                 ln = t[:m.start()].count("\n") + 1
-                around = t[max(0, m.start() - 200): m.start() + 300]
+                # 前後の窓。**狭すぎると誤検知する**（2026-09-23 実測）
+                #   計測処理にコメントを数行足しただけで、送信行と goatcounter.com の
+                #   距離が200字を超え、許可済みのはずの通信が止まった。
+                #   広げすぎると別の送信先を見逃すので、関数1つに収まる幅にしてある。
+                around = t[max(0, m.start() - 600): m.start() + 300]
                 if any(a in around for a in NET_ALLOW):
                     continue
                 ng.append(f"【要確認・外部通信】{rel}:{ln}\n"

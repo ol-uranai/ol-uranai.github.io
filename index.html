@@ -10,7 +10,7 @@
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://ol-uranai.github.io/">
 <meta property="og:title" content="あなたの日干を10秒で出す｜四柱推命の10タイプ診断">
-<meta property="og:description" content="生年月日を入れるだけ。四柱推命の「日干」が10秒で出ます。入力した生年月日はどこにも送信しません。">
+<meta property="og:description" content="生年月日を入れるだけ。四柱推命の「日干」が10秒で出ます。全部で10種類。">
 <meta property="og:image" content="https://ol-uranai.github.io/og.jpg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -18,7 +18,7 @@
 <meta property="og:locale" content="ja_JP">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="あなたの日干を10秒で出す｜四柱推命の10タイプ診断">
-<meta name="twitter:description" content="生年月日を入れるだけ。入力した生年月日はどこにも送信しません。">
+<meta name="twitter:description" content="生年月日を入れるだけ。四柱推命の「日干」が10秒で出ます。">
 <meta name="twitter:image" content="https://ol-uranai.github.io/og.jpg">
 <link rel="canonical" href="https://ol-uranai.github.io/">
 <!--
@@ -107,8 +107,7 @@
   <input type="date" id="b" min="1930-01-01" max="2035-12-31">
   <button id="go">日干を出す</button>
   <p class="note" style="margin:12px 0 0">
-    <b>生年月日は、この端末の中だけで計算します。どこにも送信しません。</b><br>
-    ページの閲覧数だけ集計しています（Cookieは使いません）。
+    出生時刻は使いません。生年月日だけで出ます。
   </p>
 </div>
 
@@ -141,7 +140,6 @@
   その他の専門的判断の代わりになるものではありません。結果は個人の性質を断定するもの
   ではなく、成果を保証するものでもありません。<br>
   日干は生年月日から算出しています（出生時刻は使いません）。<br>
-  <b>入力された生年月日は送信も保存もしていません。</b>ページが何回見られたかの集計のみ行っています。<br>
   <a href="https://note.com/ol_uranai">OL占い師ミサキ（note）</a>
 </footer>
 
@@ -178,12 +176,12 @@ const ARTICLE = {
   "甲": "https://note.com/ol_uranai/n/nb5472cb126d8",
   "乙": "https://note.com/ol_uranai/n/n138761ab38b3",
   "丙": "https://note.com/ol_uranai/n/n4275631d22c4",
-  "丁": "",
-  "戊": "",
-  "己": "",
-  "庚": "",
+  "丁": "https://note.com/ol_uranai/n/nfef7abdfaf0c",
+  "戊": "https://note.com/ol_uranai/n/n212ee1a5c09e",
+  "己": "https://note.com/ol_uranai/n/nb26f046b5735",
+  "庚": "https://note.com/ol_uranai/n/n88d83fb1069b",
   "辛": "https://note.com/ol_uranai/n/na9f5e9ae3fa1",
-  "壬": "",
+  "壬": "https://note.com/ol_uranai/n/n4fcba43feee3",
   "癸": "https://note.com/ol_uranai/n/n93d50d2d8b8d",
 };
 const FALLBACK = "https://note.com/ol_uranai";
@@ -200,25 +198,39 @@ const $ = id => document.getElementById(id);
    ■ 絶対に守ること
      **生年月日は送らない。** 送るのは「何をしたか」だけ。
      日干（10種のどれか）までは送る。個人は特定できないため。
-     Cookieも使わない。
 
-   ■ つなぎ方
-     GoatCounter（無料・Cookieなし）を想定している。
-     アカウントを作って、下の GC に自分のコードを入れるだけで動き出すわ。
-     空のままなら何も送らない（コンソールに出るだけ）。
+   ■ 公式 count.js に載せている（2026-09-24 変更）
+     最初は自前で /count を叩いていたが、**送れている確証が取れなかった**。
+     公式スクリプトなら転送は保証されるし、参照元・ブラウザ・地域も自動で入る。
+     「どの記事から来たか」を一覧で見たいので、そこは自前では代替できない。
+     外部スクリプトはこの1本だけ。公開前チェックの NET_ALLOW に登録済み。
+
+   ■ 読み込みは async なので、呼ぶ時点でまだ来ていないことがある
+     その場合は queue に積んで、読み込み後にまとめて送る。
 ────────────────────────────────────────────────────── */
-const GC = "";   // 例: "ol-uranai" → https://ol-uranai.goatcounter.com
-
+const GCQ = [];
 function track(event, detail) {
-  const path = detail ? `/${event}/${detail}` : `/${event}`;
-  if (!GC) { console.log("[track]", path); return; }
-  const u = new URL(`https://${GC}.goatcounter.com/count`);
-  u.searchParams.set("p", path);
-  u.searchParams.set("t", event);
-  navigator.sendBeacon ? navigator.sendBeacon(u) : new Image().src = u;
+  const path = detail ? `${event}/${detail}` : event;
+  const g = window.goatcounter;
+  if (g && g.count) g.count({ path: path, title: event, event: true });
+  else GCQ.push(path);            // count.js がまだ読めていない
 }
+addEventListener("load", () => {
+  const g = window.goatcounter;
+  if (!g || !g.count) {           // 広告ブロッカー等で落ちた場合
+    console.warn("[計測OFF] count.js が読み込めていません");
+    const w = document.createElement("div");
+    w.textContent = "計測OFF（count.jsが未読込）";
+    w.style.cssText = "position:fixed;right:6px;bottom:6px;z-index:9;font-size:11px;" +
+                      "padding:3px 7px;border-radius:3px;background:#9e2b25;color:#fff;opacity:.85";
+    document.body.appendChild(w);
+    return;
+  }
+  GCQ.splice(0).forEach(pth => g.count({ path: pth, title: "queued", event: true }));
+});
 
-track("view", FROM ? "from-article" : "direct");
+track("view", FROM ? `from-${FROM}` : "direct");
+
 
 function show(){
   const v = $("b").value;
@@ -256,8 +268,20 @@ $("go").addEventListener("click", show);
 $("art").addEventListener("click", () => track("to-article", $("k").textContent || "?"));
 $("b").addEventListener("keydown", e => { if(e.key === "Enter") show(); });
 
+/* 日付を入れたのに「日干を出す」を押さなかった人を数える。
+   ここが多いなら、ボタンかコピーの問題。診断そのものの問題ではない */
+let typed = false, shown = false;
+$("b").addEventListener("change", () => { typed = true; });
+$("go").addEventListener("click", () => { shown = true; });
+addEventListener("pagehide", () => {
+  if (typed && !shown) track("dropoff", "typed-not-submitted");
+  else if (!typed) track("dropoff", "never-typed");
+});
+
 $("all").innerHTML = TENKAN.map((k,i) =>
   `<li><b>${k}</b> ${TYPE[k].t}の人<br><span>${GOGYO[i]}の${INYO[i%2]}</span></li>`).join("");
 </script>
+<script data-goatcounter="https://ol-uranai.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
 </body>
 </html>
