@@ -60,8 +60,17 @@
   .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
     padding:22px;margin:22px 0}
   label{display:block;font-size:.92rem;color:var(--sub);margin-bottom:8px}
-  input[type=date]{width:100%;font:inherit;font-size:1.15rem;padding:12px 14px;
+  /* ■ type=date を使わない（2026-09-24）
+       iOSだとカレンダーのホイールが出て、生まれ年まで何十回もスクロールさせられる。
+       しかも横幅を指定しても効かず、画面からはみ出す。
+       生年月日は**打ったほうが速い**ので、数字欄3つに分けてある。 */
+  .ymd{display:flex;align-items:center;gap:6px}
+  .ymd input{flex:1 1 0;min-width:0;   /* min-width:0 がないと縮まずにはみ出す */
+    font:inherit;font-size:1.15rem;padding:12px 10px;text-align:center;
     border:1px solid var(--line);border-radius:8px;background:transparent;color:var(--ink)}
+  .ymd input#y{flex:1.6 1 0}
+  .ymd span{color:var(--sub);font-size:.95rem;flex:0 0 auto}
+  .err{margin:10px 0 0;color:var(--shu);font-size:.9rem;min-height:1.2em}
   button{width:100%;margin-top:14px;font:inherit;font-size:1.05rem;padding:13px;
     border:0;border-radius:8px;background:var(--shu);color:#f6f2e8;cursor:pointer;letter-spacing:.1em}
   button:hover{opacity:.9}
@@ -104,7 +113,15 @@
 
 <div class="card">
   <label for="b">生年月日</label>
-  <input type="date" id="b" min="1930-01-01" max="2035-12-31">
+  <div class="ymd">
+    <input id="y" inputmode="numeric" maxlength="4" placeholder="1990" aria-label="生まれた年">
+    <span>年</span>
+    <input id="m" inputmode="numeric" maxlength="2" placeholder="12" aria-label="生まれた月">
+    <span>月</span>
+    <input id="d" inputmode="numeric" maxlength="2" placeholder="4" aria-label="生まれた日">
+    <span>日</span>
+  </div>
+  <p class="err" id="err"></p>
   <button id="go">日干を出す</button>
   <p class="note" style="margin:12px 0 0">
     出生時刻は使いません。生年月日だけで出ます。
@@ -136,9 +153,8 @@
 <ul class="list" id="all"></ul>
 
 <footer>
-  本ページは四柱推命の考え方にもとづく<b>娯楽コンテンツ</b>です。医療・法律・投資・
-  その他の専門的判断の代わりになるものではありません。結果は個人の性質を断定するもの
-  ではなく、成果を保証するものでもありません。<br>
+  結果は個人の性質や能力を断定するものではなく、成果を保証するものでもありません。
+  採用・評価・配置などの判断には使わないでください。<br>
   日干は生年月日から算出しています（出生時刻は使いません）。<br>
   <a href="https://note.com/ol_uranai">OL占い師ミサキ（note）</a>
 </footer>
@@ -232,10 +248,34 @@ addEventListener("load", () => {
 track("view", FROM ? `from-${FROM}` : "direct");
 
 
+/* 数字だけ通し、埋まったら次の欄へ自動で送る。打ちっぱなしで入力できるように */
+["y","m","d"].forEach((id, n, all) => {
+  const el = $(id);
+  el.addEventListener("input", () => {
+    el.value = el.value.replace(/[^0-9]/g, "");
+    $("err").textContent = "";
+    const full = id === "y" ? 4 : 2;
+    if (el.value.length >= full && n < all.length - 1) $(all[n + 1]).focus();
+  });
+  el.addEventListener("keydown", e => { if (e.key === "Enter") show(); });
+});
+
 function show(){
-  const v = $("b").value;
-  if(!v){ $("b").focus(); return; }
-  const [y,m,d] = v.split("-").map(Number);
+  const y = +$("y").value, m = +$("m").value, d = +$("d").value;
+  const err = msg => { $("err").textContent = msg; };
+  if (!$("y").value || !$("m").value || !$("d").value) {
+    err("年・月・日をすべて入れてちょうだい。");
+    (!$("y").value ? $("y") : !$("m").value ? $("m") : $("d")).focus();
+    return;
+  }
+  if (y < 1930 || y > 2035) { err("年は1930〜2035で入れてちょうだい。"); $("y").focus(); return; }
+  /* 2月30日のような実在しない日を弾く。Dateは勝手に繰り上げるので、戻して比べる */
+  const dt = new Date(y, m - 1, d);
+  if (dt.getFullYear() !== y || dt.getMonth() !== m - 1 || dt.getDate() !== d) {
+    err("その日付は存在しないみたい。もう一度確かめてちょうだい。");
+    $("m").focus(); return;
+  }
+  err("");
   const i = nikkan(y,m,d), kan = TENKAN[i];
   $("k").textContent = kan;
   $("t").textContent = TYPE[kan].t + "の人";
@@ -266,12 +306,10 @@ function show(){
 }
 $("go").addEventListener("click", show);
 $("art").addEventListener("click", () => track("to-article", $("k").textContent || "?"));
-$("b").addEventListener("keydown", e => { if(e.key === "Enter") show(); });
-
 /* 日付を入れたのに「日干を出す」を押さなかった人を数える。
    ここが多いなら、ボタンかコピーの問題。診断そのものの問題ではない */
 let typed = false, shown = false;
-$("b").addEventListener("change", () => { typed = true; });
+["y","m","d"].forEach(id => $(id).addEventListener("input", () => { typed = true; }));
 $("go").addEventListener("click", () => { shown = true; });
 addEventListener("pagehide", () => {
   if (typed && !shown) track("dropoff", "typed-not-submitted");
